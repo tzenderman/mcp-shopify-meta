@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: mcp-shopify-meta
+    env: python
+    buildCommand: pip install -e .
+    startCommand: python -m shopify_meta.server_http
+    envVars:
+      - key: SHOPIFY_STORES
+        sync: false
+      - key: SHOPIFY_API_VERSION
+        value: 2024-10
+      - key: ISSUE_REPORT_PATH
+        value: ./data/issue_reports.jsonl
+      - key: SCALEKIT_ENVIRONMENT_URL
+        sync: false
+      - key: SCALEKIT_CLIENT_ID
+        sync: false
+      - key: SCALEKIT_CLIENT_SECRET
+        sync: false
+      - key: SCALEKIT_RESOURCE_ID
+        sync: false
+      - key: SCALEKIT_INTERCEPTOR_SECRET
+        sync: false
+      - key: SERVER_URL
+        sync: false
+      - key: ALLOWED_EMAILS
+        sync: false
+      - key: MCP_LOG_LEVEL
+        value: INFO
