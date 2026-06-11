@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 
 import jwt
 from dotenv import load_dotenv
 from fastmcp.server.auth.providers.scalekit import ScalekitProvider
-from scalekit import ScalekitClient
 from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -23,34 +21,15 @@ load_dotenv()
 
 logger = logging.getLogger("shopify_meta.http_server")
 
-# ScaleKit Configuration
+# ScaleKit Configuration. The email allowlist is enforced centrally by the
+# standalone `scalekit-interceptor` service (the ScaleKit environment's
+# interceptors point at it), so this server only validates OAuth tokens.
 SCALEKIT_ENVIRONMENT_URL = os.getenv("SCALEKIT_ENVIRONMENT_URL")
-SCALEKIT_CLIENT_ID = os.getenv("SCALEKIT_CLIENT_ID", "")
-SCALEKIT_CLIENT_SECRET = os.getenv("SCALEKIT_CLIENT_SECRET", "")
 SCALEKIT_RESOURCE_ID = os.getenv("SCALEKIT_RESOURCE_ID")
-SCALEKIT_INTERCEPTOR_SECRET = os.getenv("SCALEKIT_INTERCEPTOR_SECRET", "")
 SERVER_URL = os.getenv("SERVER_URL")
-
-# Email allowlist for interceptors (comma-separated)
-# Example: "alice@example.com,bob@example.com"
-ALLOWED_EMAILS_RAW = os.getenv("ALLOWED_EMAILS", "")
-ALLOWED_EMAILS: set[str] = {
-    email.strip().lower()
-    for email in ALLOWED_EMAILS_RAW.split(",")
-    if email.strip()
-}
 
 # Session configuration
 SESSION_COOKIE_NAME = "mcp_session"
-
-# Initialize ScaleKit client for interceptor verification
-scalekit_client: ScalekitClient | None = None
-if SCALEKIT_ENVIRONMENT_URL and SCALEKIT_CLIENT_ID and SCALEKIT_CLIENT_SECRET:
-    scalekit_client = ScalekitClient(
-        SCALEKIT_ENVIRONMENT_URL,
-        SCALEKIT_CLIENT_ID,
-        SCALEKIT_CLIENT_SECRET,
-    )
 
 
 def create_auth_provider() -> ScalekitProvider | None:
@@ -68,142 +47,6 @@ def create_auth_provider() -> ScalekitProvider | None:
         resource_id=SCALEKIT_RESOURCE_ID,
         base_url=SERVER_URL,
     )
-
-
-def is_email_allowed(email: str) -> bool:
-    """Check if an email is in the allowlist.
-
-    If ALLOWED_EMAILS is not set or empty, all emails are allowed.
-    """
-    if not ALLOWED_EMAILS:
-        return True
-    return email.lower() in ALLOWED_EMAILS
-
-
-def verify_interceptor_signature(request: Request, body: bytes) -> bool:
-    """Verify the interceptor request signature from ScaleKit.
-
-    Returns True if verification passes or if verification is not configured.
-    """
-    if not SCALEKIT_INTERCEPTOR_SECRET:
-        logger.warning("[INTERCEPTOR] No SCALEKIT_INTERCEPTOR_SECRET configured - skipping signature verification")
-        return True
-
-    if not scalekit_client:
-        logger.warning("[INTERCEPTOR] ScaleKit client not initialized - skipping signature verification")
-        return True
-
-    headers = {
-        'interceptor-id': request.headers.get('interceptor-id', ''),
-        'interceptor-signature': request.headers.get('interceptor-signature', ''),
-        'interceptor-timestamp': request.headers.get('interceptor-timestamp', ''),
-    }
-
-    try:
-        is_valid = scalekit_client.verify_interceptor_payload(
-            secret=SCALEKIT_INTERCEPTOR_SECRET,
-            headers=headers,
-            payload=body,
-        )
-        if not is_valid:
-            logger.warning("[INTERCEPTOR] Invalid signature")
-        return is_valid
-    except Exception as e:
-        logger.error(f"[INTERCEPTOR] Signature verification error: {e}")
-        return False
-
-
-async def handle_pre_signup(request: Request) -> JSONResponse:
-    """Handle ScaleKit PRE_SIGNUP interceptor.
-
-    Checks if the user's email is in the allowlist before allowing signup.
-    """
-    try:
-        # Get raw body for signature verification
-        body = await request.body()
-
-        # Verify signature
-        if not verify_interceptor_signature(request, body):
-            return JSONResponse(
-                {"decision": "DENY", "error": {"message": "Invalid request signature"}},
-            )
-
-        # Parse JSON body
-        data = json.loads(body)
-
-        # Extract email from interceptor context (two possible locations per ScaleKit docs)
-        user_email = (
-            data.get("interceptor_context", {}).get("user_email", "")
-            or data.get("data", {}).get("user", {}).get("email", "")
-        )
-        trigger_point = data.get("trigger_point", "")
-
-        logger.info(f"[INTERCEPTOR] {trigger_point} for email: {user_email}")
-
-        if is_email_allowed(user_email):
-            logger.info(f"[INTERCEPTOR] ALLOW signup for: {user_email}")
-            return JSONResponse({"decision": "ALLOW"})
-        else:
-            logger.warning(f"[INTERCEPTOR] DENY signup for: {user_email} (not in allowlist)")
-            return JSONResponse({
-                "decision": "DENY",
-                "error": {"message": "Email not authorized for signup"}
-            })
-
-    except Exception as e:
-        logger.error(f"[INTERCEPTOR] Error processing PRE_SIGNUP: {e}")
-        # Fail closed - deny on error (always HTTP 200 per ScaleKit docs, decision in body)
-        return JSONResponse({
-            "decision": "DENY",
-            "error": {"message": "Internal error processing signup"}
-        })
-
-
-async def handle_pre_session_creation(request: Request) -> JSONResponse:
-    """Handle ScaleKit PRE_SESSION_CREATION interceptor.
-
-    Checks if the user's email is in the allowlist before creating a session.
-    This blocks deleted/unauthorized users even if they have a valid token.
-    """
-    try:
-        # Get raw body for signature verification
-        body = await request.body()
-
-        # Verify signature
-        if not verify_interceptor_signature(request, body):
-            return JSONResponse(
-                {"decision": "DENY", "error": {"message": "Invalid request signature"}},
-            )
-
-        # Parse JSON body
-        data = json.loads(body)
-
-        # Extract email from interceptor context (two possible locations per ScaleKit docs)
-        user_email = (
-            data.get("interceptor_context", {}).get("user_email", "")
-            or data.get("data", {}).get("user", {}).get("email", "")
-        )
-        trigger_point = data.get("trigger_point", "")
-
-        logger.info(f"[INTERCEPTOR] {trigger_point} for email: {user_email}")
-
-        if is_email_allowed(user_email):
-            logger.info(f"[INTERCEPTOR] ALLOW session for: {user_email}")
-            return JSONResponse({"decision": "ALLOW"})
-        else:
-            logger.warning(f"[INTERCEPTOR] DENY session for: {user_email} (not in allowlist)")
-            return JSONResponse({
-                "decision": "DENY",
-                "error": {"message": "Email not authorized for access"}
-            })
-
-    except Exception as e:
-        logger.error(f"[INTERCEPTOR] Error processing PRE_SESSION_CREATION: {e}")
-        # Fail closed - deny on error (always HTTP 200 per ScaleKit docs, decision in body)
-        return JSONResponse({
-            "decision": "DENY",
-            "error": {"message": "Internal error processing session"}
-        })
 
 
 def _extract_email_from_token(auth_header: str) -> str | None:
@@ -252,14 +95,6 @@ async def handle_session_create(request: Request) -> Response:
         return JSONResponse(
             {"error": "Could not extract email from token"},
             status_code=400,
-        )
-
-    # Check email allowlist
-    if not is_email_allowed(email):
-        logger.warning(f"[SESSION] Denied session for non-allowed email: {email}")
-        return JSONResponse(
-            {"error": "Email not authorized"},
-            status_code=403,
         )
 
     # Create session
@@ -323,15 +158,13 @@ mcp = create_mcp_server(auth=auth_provider)
 
 
 def create_app():
-    """Create ASGI app with CORS middleware and interceptor endpoints."""
+    """Create ASGI app with CORS middleware and session endpoints.
+
+    Email-allowlist gating is handled centrally by the standalone
+    `scalekit-interceptor` service, not here.
+    """
     # Get the underlying Starlette app from FastMCP
     mcp_app = mcp.http_app()
-
-    # Define interceptor routes
-    interceptor_routes = [
-        Route("/auth/interceptors/pre-signup", handle_pre_signup, methods=["POST"]),
-        Route("/auth/interceptors/pre-session-creation", handle_pre_session_creation, methods=["POST"]),
-    ]
 
     # Define session management routes
     session_routes = [
@@ -340,11 +173,10 @@ def create_app():
         Route("/session/delete", handle_session_delete, methods=["POST", "DELETE"]),
     ]
 
-    # Create main app with interceptor routes, session routes, and mount MCP app
+    # Mount session routes + MCP app
     # IMPORTANT: Must pass mcp_app.lifespan to initialize FastMCP's session manager
     app = Starlette(
         routes=[
-            *interceptor_routes,
             *session_routes,
             Mount("/", app=mcp_app),  # Mount MCP app at root
         ],
@@ -389,13 +221,7 @@ def main() -> None:
         logger.info(f"ScaleKit environment: {SCALEKIT_ENVIRONMENT_URL}")
         logger.info(f"ScaleKit resource ID: {SCALEKIT_RESOURCE_ID}")
 
-    if ALLOWED_EMAILS:
-        logger.info(f"Email allowlist configured with {len(ALLOWED_EMAILS)} email(s)")
-    else:
-        logger.warning("No ALLOWED_EMAILS configured - all emails permitted")
-
-    if not SCALEKIT_INTERCEPTOR_SECRET:
-        logger.warning("No SCALEKIT_INTERCEPTOR_SECRET configured - interceptor signatures will not be verified")
+    logger.info("Email allowlist enforced centrally by the scalekit-interceptor service")
 
     if SESSION_ENABLED:
         logger.info(f"Session persistence enabled with {SESSION_TTL_DAYS} day TTL")
