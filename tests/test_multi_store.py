@@ -82,6 +82,47 @@ class TestLoadStores:
             MultiStoreManager()
 
 
+class TestClientCredentialsStores:
+    """Stores may authenticate via client_id + client_secret instead of a static token."""
+
+    def test_load_store_with_client_credentials(self, monkeypatch):
+        """A store with client_id + client_secret and no token loads successfully."""
+        store = {
+            "store_name": "creds-store",
+            "shopify_url": "https://creds-store.myshopify.com",
+            "client_id": "abc123",
+            "client_secret": "shh-secret",
+        }
+        monkeypatch.setenv("SHOPIFY_STORES", json.dumps([store]))
+
+        manager = MultiStoreManager()
+
+        assert manager.get_store_config("creds-store")["client_id"] == "abc123"
+
+    def test_load_store_with_neither_token_nor_credentials(self, monkeypatch):
+        """A store with neither token nor client credentials raises ShopifyError."""
+        store = {
+            "store_name": "broken",
+            "shopify_url": "https://broken.myshopify.com",
+        }
+        monkeypatch.setenv("SHOPIFY_STORES", json.dumps([store]))
+
+        with pytest.raises(ShopifyError, match="must define either 'token' or both 'client_id' and 'client_secret'"):
+            MultiStoreManager()
+
+    def test_load_store_with_client_id_but_no_secret(self, monkeypatch):
+        """A store with client_id but no client_secret raises ShopifyError."""
+        store = {
+            "store_name": "half",
+            "shopify_url": "https://half.myshopify.com",
+            "client_id": "abc123",
+        }
+        monkeypatch.setenv("SHOPIFY_STORES", json.dumps([store]))
+
+        with pytest.raises(ShopifyError, match="must define either 'token' or both 'client_id' and 'client_secret'"):
+            MultiStoreManager()
+
+
 class TestGetStoreConfig:
     """Tests for MultiStoreManager.get_store_config."""
 

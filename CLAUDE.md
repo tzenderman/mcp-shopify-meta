@@ -25,6 +25,31 @@ See [docs/schema_refresh.md](docs/schema_refresh.md) for the workflow and when t
 
 API version pin: `SHOPIFY_API_VERSION` env var (default `2024-10`). The vendored JSON's filename must match.
 
+## Store tokens (`SHOPIFY_STORES`)
+
+Each store entry needs `store_name`, `shopify_url`, and `token` (`shpat_...`). How you get that token depends on how the store's app was created:
+
+- **Legacy in-store custom apps** (store admin → *Settings → Apps and sales channels → Develop apps*) issue a **permanent** `shpat_` token. Paste it and forget it.
+- **New Dev Dashboard apps** (dev.shopify.com) have no "reveal token" button. Use the **`client_credentials`** grant instead:
+
+  ```bash
+  curl -X POST "https://<shop>.myshopify.com/admin/oauth/access_token" \
+    -d "grant_type=client_credentials" \
+    -d "client_id=<CLIENT_ID>" \
+    --data-urlencode "client_secret=<CLIENT_SECRET>"
+  # → {"access_token":"shpat_...","scope":"...","expires_in":86399}
+  ```
+
+> ✅ **Short-lived tokens are handled (fix B implemented).** A store can be defined by `client_id` + `client_secret` (+ `shopify_url`) instead of a baked-in `token`:
+>
+> ```json
+> {"store_name":"...","shopify_url":"https://....myshopify.com","client_id":"...","client_secret":"..."}
+> ```
+>
+> `shopify_meta/utils/token_provider.py` exchanges these for a `client_credentials` token on first use, caches it in memory with its `expires_in` (refetching `REFRESH_MARGIN_SECONDS` early), and the GraphQL client invalidates + re-exchanges once on a `401`. `.env` then holds the durable secret, never an expiring token. Static-`token` stores are unchanged and skip the exchange entirely.
+>
+> Note: the cache is in-memory and per-process — a server restart simply re-exchanges on the next request.
+
 ## ScaleKit Configuration
 
 Identical setup to `mcp-shopify-admin`. Register your server in the ScaleKit dashboard:
@@ -69,8 +94,9 @@ tests/
   test_execute_graphql.py           # parse-reject, validate-reject, success, GraphQL errors, cost passthrough
   test_issue_reporter.py            # record_issue() unit tests
   test_report_issue.py              # MCP tool wrapper
-  test_graphql_client.py            # ported retry/auth/error suite
-  test_multi_store.py               # ported multi-store config
+  test_graphql_client.py            # ported retry/auth/error suite + token-provider integration / 401 refresh
+  test_multi_store.py               # ported multi-store config + client_credentials store validation
+  test_token_provider.py            # static passthrough + client_credentials exchange/cache/invalidate
   test_session_store.py             # ported in-memory session TTL
   test_logging.py                   # truncate() + setup_logging() env reading
   test_server.py                    # EXPECTED_TOOLS = {"search_schema","get_type_definition","execute_graphql","report_issue"}

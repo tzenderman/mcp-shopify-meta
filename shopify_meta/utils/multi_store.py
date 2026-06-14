@@ -7,12 +7,19 @@ from typing import TypedDict
 from .errors import ShopifyError
 
 
-class StoreConfig(TypedDict):
-    """Type definition for store configuration."""
+class StoreConfig(TypedDict, total=False):
+    """Type definition for store configuration.
+
+    A store authenticates either with a static ``token`` or with a
+    ``client_id`` + ``client_secret`` pair that is exchanged for a
+    short-lived ``client_credentials`` token at request time.
+    """
 
     store_name: str
     shopify_url: str
     token: str
+    client_id: str
+    client_secret: str
 
 
 class MultiStoreManager:
@@ -53,7 +60,7 @@ class MultiStoreManager:
 
     def _validate_store(self, store: dict, idx: int) -> None:
         """Validate a single store configuration."""
-        required_keys = {"store_name", "shopify_url", "token"}
+        required_keys = {"store_name", "shopify_url"}
         if not isinstance(store, dict):
             raise ShopifyError(f"Store at index {idx} is not an object")
 
@@ -67,6 +74,14 @@ class MultiStoreManager:
             raise ShopifyError(
                 f"Store '{store['store_name']}' has invalid shopify_url: "
                 "must start with https://"
+            )
+
+        has_token = bool(store.get("token"))
+        has_credentials = bool(store.get("client_id")) and bool(store.get("client_secret"))
+        if not has_token and not has_credentials:
+            raise ShopifyError(
+                f"Store '{store['store_name']}' must define either 'token' or "
+                "both 'client_id' and 'client_secret'"
             )
 
     def get_store_config(self, store_name: str | None) -> StoreConfig:

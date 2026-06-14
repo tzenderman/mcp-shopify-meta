@@ -13,6 +13,7 @@ from .errors import (
     ShopifyRateLimitError,
 )
 from .multi_store import StoreConfig
+from .token_provider import TokenProvider, get_token_provider
 
 DEFAULT_API_VERSION = "2024-10"
 
@@ -25,9 +26,10 @@ class GraphQLClient:
     `extensions.cost` for self-throttling.
     """
 
-    def __init__(self):
+    def __init__(self, token_provider: TokenProvider | None = None):
         self.max_retries = 3
         self.retry_delays = [1.0, 2.0, 4.0]
+        self._token_provider = token_provider or get_token_provider()
 
     def _build_url(self, store_config: StoreConfig) -> str:
         version = os.getenv("SHOPIFY_API_VERSION", DEFAULT_API_VERSION)
@@ -51,10 +53,6 @@ class GraphQLClient:
             ShopifyAPIError: Other API errors or GraphQL `errors`.
         """
         url = self._build_url(store_config)
-        headers = {
-            "Content-Type": "application/json",
-            "X-Shopify-Access-Token": store_config["token"],
-        }
 
         payload: dict[str, Any] = {"query": query}
         if variables:
@@ -62,13 +60,27 @@ class GraphQLClient:
         if operation_name:
             payload["operationName"] = operation_name
 
+        # A store using client_credentials can recover from a 401 by exchanging
+        # for a fresh token; a static-token store cannot, so we don't retry it.
+        can_refresh = bool(store_config.get("client_id")) and not store_config.get("token")
+        token_refreshed = False
+
         last_error: Exception | None = None
         for attempt in range(self.max_retries):
             try:
+                token = await self._token_provider.get_token(store_config)
+                headers = {
+                    "Content-Type": "application/json",
+                    "X-Shopify-Access-Token": token,
+                }
                 async with httpx.AsyncClient(timeout=60.0) as client:
                     response = await client.post(url, json=payload, headers=headers)
 
                     if response.status_code == 401:
+                        if can_refresh and not token_refreshed:
+                            self._token_provider.invalidate(store_config["store_name"])
+                            token_refreshed = True
+                            continue
                         raise ShopifyAuthError(
                             "Invalid access token. Check SHOPIFY_STORES configuration.",
                             store_name=store_config["store_name"],

@@ -41,6 +41,83 @@ def _make_mock_client(post_return=None, post_side_effect=None):
     return mock_client
 
 
+CREDS_CONFIG = {
+    "store_name": "creds",
+    "shopify_url": "https://creds.myshopify.com",
+    "client_id": "cid",
+    "client_secret": "csecret",
+}
+
+
+class _SeqProvider:
+    """Fake TokenProvider returning a fresh token per call, recording invalidations."""
+
+    def __init__(self, *tokens):
+        self.tokens = list(tokens)
+        self.invalidated = []
+
+    async def get_token(self, store_config):
+        return self.tokens.pop(0)
+
+    def invalidate(self, store_name):
+        self.invalidated.append(store_name)
+
+
+@pytest.mark.asyncio
+class TestTokenIntegration:
+    """The client resolves its auth header via the token provider."""
+
+    async def test_auth_header_uses_provider_token(self):
+        """The X-Shopify-Access-Token header comes from the token provider."""
+        provider = _SeqProvider("shpat_resolved")
+        mock_response = _make_mock_response(200, {"data": {}})
+        mock_client = _make_mock_client(post_return=mock_response)
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            client = GraphQLClient(token_provider=provider)
+            await client.execute_query(CREDS_CONFIG, "{ shop { name } }")
+
+        headers = mock_client.post.call_args.kwargs["headers"]
+        assert headers["X-Shopify-Access-Token"] == "shpat_resolved"
+
+    async def test_401_credentials_store_refreshes_and_retries(self):
+        """A 401 on a client_credentials store invalidates the token and retries once."""
+        provider = _SeqProvider("tok-old", "tok-new")
+        mock_client = _make_mock_client(
+            post_side_effect=[
+                _make_mock_response(401),
+                _make_mock_response(200, {"data": {"shop": {"name": "OK"}}}),
+            ]
+        )
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            client = GraphQLClient(token_provider=provider)
+            client.retry_delays = [0, 0, 0]
+            result = await client.execute_query(CREDS_CONFIG, "{ shop { name } }")
+
+        assert result == {"data": {"shop": {"name": "OK"}}}
+        assert provider.invalidated == ["creds"]
+        assert mock_client.post.await_count == 2
+        second_headers = mock_client.post.call_args_list[1].kwargs["headers"]
+        assert second_headers["X-Shopify-Access-Token"] == "tok-new"
+
+    async def test_401_credentials_store_raises_after_one_refresh(self):
+        """If the refreshed token is still 401, the client gives up and raises."""
+        provider = _SeqProvider("tok-old", "tok-new")
+        mock_client = _make_mock_client(
+            post_side_effect=[_make_mock_response(401), _make_mock_response(401)]
+        )
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            client = GraphQLClient(token_provider=provider)
+            client.retry_delays = [0, 0, 0]
+            with pytest.raises(ShopifyAuthError):
+                await client.execute_query(CREDS_CONFIG, "{ shop { name } }")
+
+        assert provider.invalidated == ["creds"]
+        assert mock_client.post.await_count == 2
+
+
 @pytest.mark.asyncio
 class TestGraphQLClient:
     """Tests for GraphQLClient.execute_query."""
