@@ -14,14 +14,17 @@ license = { text = "MIT" }
 # schema rule that Shopify's own Admin schema violates (implementation field
 # deprecated while the interface field is not), so every execute_graphql call
 # failed validation. uvx ignores uv.lock, so an unbounded range ships whatever
-# PyPI has that morning. tests/test_vendored_schema.py guards a raise.
+# PyPI has that morning. Pinned EXACTLY to the version that was supply-chain
+# audited (2026-09-28: wheel == signed tag v3.2.13, PyPI trusted-publishing
+# provenance, code diff reviewed) -- bump only after auditing the new release.
+# tests/test_vendored_schema.py guards a raise.
 dependencies = [
     "fastmcp>=2.13.0,<4",
     "httpx>=0.28.1",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
     "scalekit-sdk-python>=2.4.0",
-    "graphql-core>=3.2.3,<3.3",
+    "graphql-core==3.2.13",
 ]
 
 [tool.hatch.build.targets.wheel]
