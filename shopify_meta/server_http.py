@@ -97,7 +97,15 @@ def main() -> None:
     get_schema()
 
     if not auth_provider:
-        logger.warning("Starting server WITHOUT OAuth authentication!")
+        # Fail closed: an HTTP server without OAuth exposes tools that hold
+        # Shopify credentials to anyone who can reach the port.
+        if os.getenv("MCP_ALLOW_NO_AUTH") != "1":
+            raise RuntimeError(
+                "Refusing to start the HTTP server without OAuth. Set "
+                "SCALEKIT_ENVIRONMENT_URL, SCALEKIT_RESOURCE_ID and SERVER_URL, "
+                "or set MCP_ALLOW_NO_AUTH=1 for local testing only."
+            )
+        logger.warning("Starting server WITHOUT OAuth authentication (MCP_ALLOW_NO_AUTH=1)!")
     else:
         logger.info(f"ScaleKit environment: {SCALEKIT_ENVIRONMENT_URL}")
         logger.info(f"ScaleKit resource ID: {SCALEKIT_RESOURCE_ID}")

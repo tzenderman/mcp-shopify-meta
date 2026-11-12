@@ -50,3 +50,45 @@ def test_session_symbols_removed():
         "session_store",
     ):
         assert not hasattr(srv, name), f"{name} should be removed"
+
+
+# --- Fail closed when OAuth is not configured --------------------------------
+
+import pytest
+
+
+@pytest.fixture
+def fake_uvicorn(monkeypatch):
+    """Capture uvicorn.run instead of binding a port."""
+    calls = []
+    monkeypatch.setattr("uvicorn.run", lambda *a, **kw: calls.append((a, kw)))
+    monkeypatch.setenv("SHOPIFY_STORES", '[{"store_name":"s","shopify_url":"https://s.myshopify.com","token":"t"}]')
+    return calls
+
+
+def test_main_refuses_to_start_without_oauth(monkeypatch, fake_uvicorn):
+    monkeypatch.setattr(srv, "auth_provider", None)
+    monkeypatch.delenv("MCP_ALLOW_NO_AUTH", raising=False)
+
+    with pytest.raises(RuntimeError, match="SCALEKIT"):
+        srv.main()
+
+    assert fake_uvicorn == [], "server must not start without OAuth"
+
+
+def test_main_starts_without_oauth_only_with_explicit_opt_out(monkeypatch, fake_uvicorn):
+    monkeypatch.setattr(srv, "auth_provider", None)
+    monkeypatch.setenv("MCP_ALLOW_NO_AUTH", "1")
+
+    srv.main()
+
+    assert len(fake_uvicorn) == 1
+
+
+def test_main_starts_with_oauth(monkeypatch, fake_uvicorn):
+    monkeypatch.setattr(srv, "auth_provider", object())
+    monkeypatch.delenv("MCP_ALLOW_NO_AUTH", raising=False)
+
+    srv.main()
+
+    assert len(fake_uvicorn) == 1
