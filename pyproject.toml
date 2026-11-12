@@ -3,7 +3,7 @@ name = "mcp-shopify-meta"
 version = "0.1.0"
 description = "MCP server providing generic schema-walking access to the Shopify Admin GraphQL API"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Tim Zenderman" }]
 license = { text = "MIT" }
 # fastmcp is upper-bounded on purpose: an unbounded SDK range across a major
