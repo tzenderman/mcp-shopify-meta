@@ -64,15 +64,28 @@ def create_app():
         lifespan=mcp_app.lifespan,
     )
 
-    # Add CORS middleware for MCP Inspector and browser clients
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-    )
+    # CORS is only for browser-based clients (e.g. MCP Inspector). Server-side
+    # clients (claude.ai connectors, Atrium) don't use it, so cross-origin
+    # access is closed unless origins are listed explicitly. Credentials are
+    # never allowed: auth is a bearer token, not a cookie.
+    origins = [
+        o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()
+    ]
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "Mcp-Session-Id",
+                "Mcp-Protocol-Version",
+                "Last-Event-ID",
+            ],
+            expose_headers=["Mcp-Session-Id", "WWW-Authenticate"],
+        )
 
     return app
 

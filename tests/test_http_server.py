@@ -92,3 +92,49 @@ def test_main_starts_with_oauth(monkeypatch, fake_uvicorn):
     srv.main()
 
     assert len(fake_uvicorn) == 1
+
+
+# --- CORS: closed by default, explicit allowlist, never credentials -----------
+
+from starlette.testclient import TestClient
+
+
+def _preflight(app, *origins):
+    """Send a CORS preflight per origin; returns the responses in order.
+
+    One TestClient for all requests: the context manager runs the app lifespan
+    (FastMCP needs it when no CORS middleware answers first), and FastMCP's
+    session manager can only be started once per app.
+    """
+    with TestClient(app) as client:
+        return [
+            client.options(
+                "/mcp",
+                headers={
+                    "Origin": origin,
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": "authorization,content-type",
+                },
+            )
+            for origin in origins
+        ]
+
+
+def test_cors_denies_cross_origin_by_default(monkeypatch):
+    monkeypatch.delenv("CORS_ALLOW_ORIGINS", raising=False)
+    (resp,) = _preflight(srv.create_app(), "https://evil.example")
+    assert "access-control-allow-origin" not in resp.headers
+
+
+def test_cors_allows_only_listed_origins(monkeypatch):
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "http://localhost:6274, https://inspector.example")
+    ok, evil = _preflight(srv.create_app(), "http://localhost:6274", "https://evil.example")
+
+    assert ok.headers.get("access-control-allow-origin") == "http://localhost:6274"
+    assert "access-control-allow-origin" not in evil.headers
+
+
+def test_cors_never_allows_credentials(monkeypatch):
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "http://localhost:6274")
+    (resp,) = _preflight(srv.create_app(), "http://localhost:6274")
+    assert "access-control-allow-credentials" not in resp.headers
