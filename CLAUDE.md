@@ -97,7 +97,6 @@ tests/
   test_graphql_client.py            # ported retry/auth/error suite + token-provider integration / 401 refresh
   test_multi_store.py               # ported multi-store config + client_credentials store validation
   test_token_provider.py            # static passthrough + client_credentials exchange/cache/invalidate
-  test_session_store.py             # ported in-memory session TTL
   test_logging.py                   # truncate() + setup_logging() env reading
   test_server.py                    # EXPECTED_TOOLS = {"search_schema","get_type_definition","execute_graphql","report_issue"}
 ```
@@ -159,7 +158,7 @@ Never write production code before its test exists and fails. Never adapt previo
 
 **`shopify_meta/server.py`** — slim FastMCP registration (4 `mcp.tool()(fn)` calls)
 
-**`shopify_meta/server_http.py`** — Starlette wrapper with ScaleKit OAuth + interceptors + session store (ported, package paths swapped)
+**`shopify_meta/server_http.py`** — Starlette wrapper with ScaleKit OAuth (bearer tokens only; no session cookies)
 
 **`shopify_meta/server_stdio.py`** — stdio entrypoint with env validation
 

@@ -1,8 +1,8 @@
 """Shape tests for the HTTP server after centralizing the email allowlist.
 
 Gating now lives entirely in the standalone `scalekit-interceptor` service, so
-this server keeps only ScaleKit OAuth (the `/mcp` gate) and the session
-endpoints — the per-server interceptor endpoints and allowlist are removed.
+this server keeps only ScaleKit OAuth (the `/mcp` gate) — the per-server
+interceptor endpoints, allowlist and session endpoints are removed.
 """
 
 import shopify_meta.server_http as srv
@@ -33,7 +33,20 @@ def test_oauth_provider_retained():
     assert srv.SCALEKIT_RESOURCE_ID is None or isinstance(srv.SCALEKIT_RESOURCE_ID, str)
 
 
-def test_session_routes_retained():
-    paths = _route_paths()
-    assert "/session/create" in paths
-    assert "/session/check" in paths
+def test_session_routes_removed():
+    """The /session/* endpoints minted cookies from an UNVERIFIED JWT and no
+    route ever accepted that cookie as auth — dead code with a forgery hole.
+    The MCP endpoint is gated by ScaleKit bearer tokens alone."""
+    assert not any(p.startswith("/session") for p in _route_paths()), _route_paths()
+
+
+def test_session_symbols_removed():
+    for name in (
+        "handle_session_create",
+        "handle_session_check",
+        "handle_session_delete",
+        "_extract_email_from_token",
+        "SESSION_COOKIE_NAME",
+        "session_store",
+    ):
+        assert not hasattr(srv, name), f"{name} should be removed"

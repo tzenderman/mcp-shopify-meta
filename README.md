@@ -213,7 +213,6 @@ No new code should be merged without corresponding test coverage. See [CLAUDE.md
 - **`validator.py`** - Wraps `graphql-core` for parse + validate + variable coercion; returns structured error responses instead of raising
 - **`issue_reporter.py`** - Single-function entry point for `report_issue` storage (JSONL append + structured log line)
 - **`multi_store.py`** - `SHOPIFY_STORES` JSON-env multi-tenant config (ported)
-- **`session_store.py`** - In-memory session storage with TTL (ported)
 - **`server.py`** - FastMCP server with the four tool registrations
 - **`server_http.py`** - Starlette wrapper with MCP Streamable HTTP transport and ScaleKit OAuth (ported)
 - **`server_stdio.py`** - Stdio transport for local Claude Desktop integration
