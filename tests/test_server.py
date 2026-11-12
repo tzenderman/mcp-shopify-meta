@@ -24,10 +24,10 @@ async def test_all_tools_registered(monkeypatch, tmp_path):
     monkeypatch.setenv("SHOPIFY_SCHEMA_PATH", str(schema_path))
 
     mcp = create_mcp_server()
-    tools = await mcp.get_tools()
-    assert set(tools.keys()) == EXPECTED_TOOLS, (
-        f"unexpected tools registered: extra={set(tools.keys()) - EXPECTED_TOOLS}, "
-        f"missing={EXPECTED_TOOLS - set(tools.keys())}"
+    names = {t.name for t in await mcp.list_tools()}
+    assert names == EXPECTED_TOOLS, (
+        f"unexpected tools registered: extra={names - EXPECTED_TOOLS}, "
+        f"missing={EXPECTED_TOOLS - names}"
     )
 
 
