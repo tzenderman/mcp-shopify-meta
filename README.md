@@ -18,7 +18,7 @@ It's a sibling to [`mcp-shopify-admin`](../mcp-shopify-admin) — that server sh
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager
 - A Shopify store with [Admin API access](https://shopify.dev/docs/api/admin-graphql) (custom app with API token)
 
