@@ -2,8 +2,11 @@ services:
   - type: web
     name: mcp-shopify-meta
     env: python
-    buildCommand: pip install -e .
-    startCommand: python -m shopify_meta.server_http
+    # Install exactly what uv.lock pins (--locked fails the build if the lock is
+    # stale vs pyproject), then run from that environment. Never `pip install -e .`:
+    # it re-resolves from the pyproject ranges, so the audited lock isn't what runs.
+    buildCommand: pip install uv==0.10.10 && uv sync --locked --no-dev
+    startCommand: .venv/bin/python -m shopify_meta.server_http
     envVars:
       - key: SHOPIFY_STORES
         sync: false

@@ -97,7 +97,6 @@ tests/
   test_graphql_client.py            # ported retry/auth/error suite + token-provider integration / 401 refresh
   test_multi_store.py               # ported multi-store config + client_credentials store validation
   test_token_provider.py            # static passthrough + client_credentials exchange/cache/invalidate
-  test_session_store.py             # ported in-memory session TTL
   test_logging.py                   # truncate() + setup_logging() env reading
   test_server.py                    # EXPECTED_TOOLS = {"search_schema","get_type_definition","execute_graphql","report_issue"}
 ```
@@ -151,6 +150,7 @@ Never write production code before its test exists and fails. Never adapt previo
 - Validation errors return structured `{path, locations, message}` — no exception leak
 
 **`shopify_meta/utils/issue_reporter.py`** — single-function `record_issue(payload)`
+- Redacts first (both sinks): values under secret-like keys, Shopify `shp??_` tokens in text, email addresses
 - Always: structured `ISSUE_REPORT <json>` log line (captured by Render's log stream)
 - Best-effort: append JSON to `data/issue_reports.jsonl` (configurable via `ISSUE_REPORT_PATH`)
 - Returns `(report_id, wrote_to_file)`
@@ -159,7 +159,7 @@ Never write production code before its test exists and fails. Never adapt previo
 
 **`shopify_meta/server.py`** — slim FastMCP registration (4 `mcp.tool()(fn)` calls)
 
-**`shopify_meta/server_http.py`** — Starlette wrapper with ScaleKit OAuth + interceptors + session store (ported, package paths swapped)
+**`shopify_meta/server_http.py`** — Starlette wrapper with ScaleKit OAuth (bearer tokens only; no session cookies)
 
 **`shopify_meta/server_stdio.py`** — stdio entrypoint with env validation
 

@@ -1,8 +1,8 @@
 """Shape tests for the HTTP server after centralizing the email allowlist.
 
 Gating now lives entirely in the standalone `scalekit-interceptor` service, so
-this server keeps only ScaleKit OAuth (the `/mcp` gate) and the session
-endpoints — the per-server interceptor endpoints and allowlist are removed.
+this server keeps only ScaleKit OAuth (the `/mcp` gate) — the per-server
+interceptor endpoints, allowlist and session endpoints are removed.
 """
 
 import shopify_meta.server_http as srv
@@ -33,7 +33,108 @@ def test_oauth_provider_retained():
     assert srv.SCALEKIT_RESOURCE_ID is None or isinstance(srv.SCALEKIT_RESOURCE_ID, str)
 
 
-def test_session_routes_retained():
-    paths = _route_paths()
-    assert "/session/create" in paths
-    assert "/session/check" in paths
+def test_session_routes_removed():
+    """The /session/* endpoints minted cookies from an UNVERIFIED JWT and no
+    route ever accepted that cookie as auth — dead code with a forgery hole.
+    The MCP endpoint is gated by ScaleKit bearer tokens alone."""
+    assert not any(p.startswith("/session") for p in _route_paths()), _route_paths()
+
+
+def test_session_symbols_removed():
+    for name in (
+        "handle_session_create",
+        "handle_session_check",
+        "handle_session_delete",
+        "_extract_email_from_token",
+        "SESSION_COOKIE_NAME",
+        "session_store",
+    ):
+        assert not hasattr(srv, name), f"{name} should be removed"
+
+
+# --- Fail closed when OAuth is not configured --------------------------------
+
+import pytest
+
+
+@pytest.fixture
+def fake_uvicorn(monkeypatch):
+    """Capture uvicorn.run instead of binding a port."""
+    calls = []
+    monkeypatch.setattr("uvicorn.run", lambda *a, **kw: calls.append((a, kw)))
+    monkeypatch.setenv("SHOPIFY_STORES", '[{"store_name":"s","shopify_url":"https://s.myshopify.com","token":"t"}]')
+    return calls
+
+
+def test_main_refuses_to_start_without_oauth(monkeypatch, fake_uvicorn):
+    monkeypatch.setattr(srv, "auth_provider", None)
+    monkeypatch.delenv("MCP_ALLOW_NO_AUTH", raising=False)
+
+    with pytest.raises(RuntimeError, match="SCALEKIT"):
+        srv.main()
+
+    assert fake_uvicorn == [], "server must not start without OAuth"
+
+
+def test_main_starts_without_oauth_only_with_explicit_opt_out(monkeypatch, fake_uvicorn):
+    monkeypatch.setattr(srv, "auth_provider", None)
+    monkeypatch.setenv("MCP_ALLOW_NO_AUTH", "1")
+
+    srv.main()
+
+    assert len(fake_uvicorn) == 1
+
+
+def test_main_starts_with_oauth(monkeypatch, fake_uvicorn):
+    monkeypatch.setattr(srv, "auth_provider", object())
+    monkeypatch.delenv("MCP_ALLOW_NO_AUTH", raising=False)
+
+    srv.main()
+
+    assert len(fake_uvicorn) == 1
+
+
+# --- CORS: closed by default, explicit allowlist, never credentials -----------
+
+from starlette.testclient import TestClient
+
+
+def _preflight(app, *origins):
+    """Send a CORS preflight per origin; returns the responses in order.
+
+    One TestClient for all requests: the context manager runs the app lifespan
+    (FastMCP needs it when no CORS middleware answers first), and FastMCP's
+    session manager can only be started once per app.
+    """
+    with TestClient(app) as client:
+        return [
+            client.options(
+                "/mcp",
+                headers={
+                    "Origin": origin,
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": "authorization,content-type",
+                },
+            )
+            for origin in origins
+        ]
+
+
+def test_cors_denies_cross_origin_by_default(monkeypatch):
+    monkeypatch.delenv("CORS_ALLOW_ORIGINS", raising=False)
+    (resp,) = _preflight(srv.create_app(), "https://evil.example")
+    assert "access-control-allow-origin" not in resp.headers
+
+
+def test_cors_allows_only_listed_origins(monkeypatch):
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "http://localhost:6274, https://inspector.example")
+    ok, evil = _preflight(srv.create_app(), "http://localhost:6274", "https://evil.example")
+
+    assert ok.headers.get("access-control-allow-origin") == "http://localhost:6274"
+    assert "access-control-allow-origin" not in evil.headers
+
+
+def test_cors_never_allows_credentials(monkeypatch):
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "http://localhost:6274")
+    (resp,) = _preflight(srv.create_app(), "http://localhost:6274")
+    assert "access-control-allow-credentials" not in resp.headers
