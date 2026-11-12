@@ -23,7 +23,7 @@ SHOPIFY_STORES='[...]' uv run python scripts/refresh_schema.py
 
 See [docs/schema_refresh.md](docs/schema_refresh.md) for the workflow and when to refresh.
 
-API version pin: `SHOPIFY_API_VERSION` env var (default `2024-10`). The vendored JSON's filename must match.
+API version pin: `SHOPIFY_API_VERSION` env var (default `2026-10`, set in `graphql_client.DEFAULT_API_VERSION`). The vendored JSON's filename must match.
 
 ## Store tokens (`SHOPIFY_STORES`)
 
@@ -129,7 +129,7 @@ Never write production code before its test exists and fails. Never adapt previo
 - Per-request `httpx.AsyncClient` (no persistent pool)
 - Exponential backoff retry on 429/5xx and network/timeout failures (3 attempts, delays `[1s, 2s, 4s]`)
 - Error hierarchy: `ShopifyAuthError`, `ShopifyNotFoundError`, `ShopifyRateLimitError`, `ShopifyAPIError`
-- API version controlled by `SHOPIFY_API_VERSION` env (default `2024-10`)
+- API version controlled by `SHOPIFY_API_VERSION` env (default `2026-10`)
 
 **`shopify_meta/utils/schema_loader.py`** — module-import-time loader
 - Reads `shopify_meta/schema/admin_<version>.json`

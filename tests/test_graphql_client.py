@@ -360,8 +360,8 @@ class TestGraphQLClient:
         called_url = mock_client.post.call_args[0][0]
         assert "/admin/api/2025-01/graphql.json" in called_url
 
-    async def test_default_api_version_is_2024_10(self, monkeypatch):
-        """Without SHOPIFY_API_VERSION set, the default is 2024-10."""
+    async def test_default_api_version_is_2026_10(self, monkeypatch):
+        """Without SHOPIFY_API_VERSION set, the default is 2026-10 (latest stable)."""
         monkeypatch.delenv("SHOPIFY_API_VERSION", raising=False)
         mock_response = _make_mock_response(200, {"data": {}})
         mock_client = _make_mock_client(post_return=mock_response)
@@ -371,4 +371,4 @@ class TestGraphQLClient:
             await client.execute_query(STORE_CONFIG, "{ shop { name } }")
 
         called_url = mock_client.post.call_args[0][0]
-        assert "/admin/api/2024-10/graphql.json" in called_url
+        assert "/admin/api/2026-10/graphql.json" in called_url
