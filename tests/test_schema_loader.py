@@ -130,3 +130,12 @@ class TestGetSchemaSingleton:
         b = mod.get_schema()
         assert a is b
         mod._schema = None
+
+
+def test_default_schema_path_follows_latest_stable_version(monkeypatch):
+    """Without SHOPIFY_API_VERSION, the vendored schema is admin_2026_10.json —
+    the same version the GraphQL client calls, so validation matches the API."""
+    from shopify_meta.utils import schema_loader
+
+    monkeypatch.delenv("SHOPIFY_API_VERSION", raising=False)
+    assert schema_loader._default_schema_path().endswith("admin_2026_10.json")

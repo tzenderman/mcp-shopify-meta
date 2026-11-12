@@ -5,7 +5,7 @@ The server validates and indexes against a single introspection JSON that ships 
 ## When to refresh
 
 - **Initial setup of a fresh clone** — the file is gitignored, so a new clone won't have one. The server fails loud at startup until you run the script.
-- **Bumping `SHOPIFY_API_VERSION`** — each version has its own file (e.g. `admin_2024_10.json`, `admin_2025_01.json`).
+- **Bumping `SHOPIFY_API_VERSION`** — each version has its own file (e.g. `admin_2026_10.json`, `admin_2027_01.json`). Delete the old file after switching.
 - **Picking up new Shopify types/fields** — Shopify ships changes mid-version sometimes; rerun if you need them.
 
 ## Running the script
@@ -27,7 +27,7 @@ Output:
 
 ```
 INFO refresh_schema: Running introspection against https://main.myshopify.com
-INFO refresh_schema: Wrote vendored schema to .../shopify_meta/schema/admin_2024_10.json (XXXXXX bytes)
+INFO refresh_schema: Wrote vendored schema to .../shopify_meta/schema/admin_2026_10.json (XXXXXX bytes)
 ```
 
 ## What the file contains

@@ -20,7 +20,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_API_VERSION = "2024-10"
+from .graphql_client import DEFAULT_API_VERSION  # single source of truth
 SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schema"
 
 SCALAR_KIND_TO_SEARCH = {
