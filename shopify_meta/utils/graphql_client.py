@@ -15,7 +15,7 @@ from .errors import (
 from .multi_store import StoreConfig
 from .token_provider import TokenProvider, get_token_provider
 
-DEFAULT_API_VERSION = "2024-10"
+DEFAULT_API_VERSION = "2026-10"  # latest stable; also selects the vendored schema file
 
 
 class GraphQLClient:

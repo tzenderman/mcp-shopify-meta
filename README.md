@@ -57,7 +57,7 @@ This mode runs the server as a web service with OAuth 2.0 authentication via [Sc
 
 **Optional:**
 - `ALLOWED_EMAILS` - Comma-separated list of allowed email addresses (leave empty to allow all authenticated users)
-- `SHOPIFY_API_VERSION` - Pinned API version (default `2024-10`)
+- `SHOPIFY_API_VERSION` - Pinned API version (default `2026-10`)
 - `ISSUE_REPORT_PATH` - Where `report_issue` writes its JSONL file (default `./data/issue_reports.jsonl`)
 - `MCP_LOG_LEVEL` - Logging level (default `INFO`)
 - `MCP_LOG_FILE` - Enable file logging with rotation
