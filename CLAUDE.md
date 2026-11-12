@@ -150,6 +150,7 @@ Never write production code before its test exists and fails. Never adapt previo
 - Validation errors return structured `{path, locations, message}` — no exception leak
 
 **`shopify_meta/utils/issue_reporter.py`** — single-function `record_issue(payload)`
+- Redacts first (both sinks): values under secret-like keys, Shopify `shp??_` tokens in text, email addresses
 - Always: structured `ISSUE_REPORT <json>` log line (captured by Render's log stream)
 - Best-effort: append JSON to `data/issue_reports.jsonl` (configurable via `ISSUE_REPORT_PATH`)
 - Returns `(report_id, wrote_to_file)`

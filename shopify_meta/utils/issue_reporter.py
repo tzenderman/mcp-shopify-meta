@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import sys
 from datetime import datetime, timezone
@@ -28,6 +29,37 @@ from shopify_meta import __version__
 logger = logging.getLogger(__name__)
 
 DEFAULT_PATH = "./data/issue_reports.jsonl"
+
+
+REDACTED = "[REDACTED]"
+
+# Keys whose values are dropped wherever they appear in the payload.
+_SECRET_KEY = re.compile(
+    r"token|secret|password|passwd|authorization|api[_-]?key|cookie|credential",
+    re.IGNORECASE,
+)
+# Shopify credentials (shpat_/shpss_/shpca_/shppa_...) appearing inside text.
+_SHOPIFY_TOKEN = re.compile(r"\bshp[a-z]{2}_[0-9a-fA-F]{16,}\b")
+_EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")
+
+
+def _redact(value):
+    """Best-effort scrub of credentials and email addresses before persisting.
+
+    Reports carry model-supplied tool arguments and response excerpts, which can
+    contain secrets or customer PII. Names/addresses can't be detected reliably;
+    this covers credentials and emails.
+    """
+    if isinstance(value, dict):
+        return {
+            k: REDACTED if isinstance(k, str) and _SECRET_KEY.search(k) else _redact(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact(v) for v in value]
+    if isinstance(value, str):
+        return _EMAIL.sub(REDACTED, _SHOPIFY_TOKEN.sub(REDACTED, value))
+    return value
 
 
 def _new_report_id() -> str:
@@ -47,7 +79,7 @@ def record_issue(payload: dict) -> tuple[str, bool]:
         append failed (e.g. permission denied or ephemeral filesystem).
     """
     enriched = {
-        **payload,
+        **_redact(payload),
         "report_id": _new_report_id(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "server": "mcp-shopify-meta",

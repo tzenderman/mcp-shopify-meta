@@ -78,3 +78,54 @@ class TestRecordIssue:
         json_portion = log_messages[0].split("ISSUE_REPORT ", 1)[1]
         parsed = json.loads(json_portion)
         assert parsed["summary"] == "logme"
+
+
+class TestRedaction:
+    """Reports carry model-supplied arguments and response excerpts, which can
+    contain credentials or customer PII. Both sinks (log line + JSONL) must
+    receive the redacted payload."""
+
+    def _record(self, tmp_path, monkeypatch, caplog, payload):
+        path = tmp_path / "issues.jsonl"
+        monkeypatch.setenv("ISSUE_REPORT_PATH", str(path))
+        with caplog.at_level(logging.INFO):
+            record_issue(payload)
+        log_line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("ISSUE_REPORT "))
+        return path.read_text(), log_line
+
+    def test_redacts_values_under_secret_keys_at_any_depth(self, tmp_path, monkeypatch, caplog):
+        stored, logged = self._record(tmp_path, monkeypatch, caplog, {
+            "tool_arguments": {
+                "headers": {"Authorization": "Bearer abc123", "X-Shopify-Access-Token": "tok_live"},
+                "stores": [{"client_secret": "s3cr3t", "password": "hunter2", "api_key": "k"}],
+            },
+        })
+        for sink in (stored, logged):
+            for leaked in ("abc123", "tok_live", "s3cr3t", "hunter2"):
+                assert leaked not in sink
+            assert "[REDACTED]" in sink
+
+    def test_redacts_shopify_tokens_inside_text(self, tmp_path, monkeypatch, caplog):
+        token = "shpat_" + "a1b2c3d4" * 4
+        stored, logged = self._record(tmp_path, monkeypatch, caplog, {
+            "error_message": f"401 using token {token}",
+        })
+        for sink in (stored, logged):
+            assert token not in sink
+
+    def test_masks_email_addresses(self, tmp_path, monkeypatch, caplog):
+        stored, logged = self._record(tmp_path, monkeypatch, caplog, {
+            "response_excerpt": '{"customer": {"email": "jane.doe@example.com"}}',
+        })
+        for sink in (stored, logged):
+            assert "jane.doe@example.com" not in sink
+
+    def test_keeps_debugging_data_intact(self, tmp_path, monkeypatch, caplog):
+        query = 'query { order(id: "gid://shopify/Order/5551234567") { name } }'
+        stored, _ = self._record(tmp_path, monkeypatch, caplog, {
+            "summary": "order lookup failed",
+            "tool_arguments": {"query": query, "store_name": "jean-paul"},
+        })
+        payload = json.loads(stored.strip())
+        assert payload["tool_arguments"] == {"query": query, "store_name": "jean-paul"}
+        assert payload["summary"] == "order lookup failed"
