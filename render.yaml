@@ -16,17 +16,9 @@ services:
         value: ./data/issue_reports.jsonl
       - key: SCALEKIT_ENVIRONMENT_URL
         sync: false
-      - key: SCALEKIT_CLIENT_ID
-        sync: false
-      - key: SCALEKIT_CLIENT_SECRET
-        sync: false
       - key: SCALEKIT_RESOURCE_ID
         sync: false
-      - key: SCALEKIT_INTERCEPTOR_SECRET
-        sync: false
       - key: SERVER_URL
-        sync: false
-      - key: ALLOWED_EMAILS
         sync: false
       - key: MCP_LOG_LEVEL
         value: INFO

@@ -49,14 +49,10 @@ This mode runs the server as a web service with OAuth 2.0 authentication via [Sc
 **Required environment variables:**
 - `SHOPIFY_STORES` - JSON array of store configurations (see below)
 - `SCALEKIT_ENVIRONMENT_URL` - ScaleKit environment URL (e.g., `https://yourapp.scalekit.com`)
-- `SCALEKIT_CLIENT_ID` - ScaleKit application client ID
-- `SCALEKIT_CLIENT_SECRET` - ScaleKit application client secret
 - `SCALEKIT_RESOURCE_ID` - ScaleKit resource identifier (e.g., `res_xxx`)
-- `SCALEKIT_INTERCEPTOR_SECRET` - Secret for verifying interceptor payloads
 - `SERVER_URL` - Your MCP server's public URL (e.g., `https://your-server.example.com`)
 
 **Optional:**
-- `ALLOWED_EMAILS` - Comma-separated list of allowed email addresses (leave empty to allow all authenticated users)
 - `SHOPIFY_API_VERSION` - Pinned API version (default `2026-10`)
 - `ISSUE_REPORT_PATH` - Where `report_issue` writes its JSONL file (default `./data/issue_reports.jsonl`)
 - `MCP_LOG_LEVEL` - Logging level (default `INFO`)
